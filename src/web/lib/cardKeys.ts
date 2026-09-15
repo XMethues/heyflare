@@ -79,10 +79,12 @@ export function useItemCursor({ count, onOpen, enabled = true }: { count: number
     setCursor((c) => (c >= count ? count - 1 : c));
   }, [count]);
 
+  // `count` is also a dependency: when the focused item is removed, the next one slides into the
+  // same cursor number, so the number alone wouldn't tell us to re-scroll to it.
   useEffect(() => {
     if (cursor < 0) return;
     document.querySelector(`[data-item-index="${cursor}"]`)?.scrollIntoView({ block: "nearest" });
-  }, [cursor]);
+  }, [cursor, count]);
 
   const step = (delta: number) => {
     if (overlayOpen()) return;

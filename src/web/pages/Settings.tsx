@@ -28,6 +28,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { AiSection } from "../components/AiSettingsSection";
 import { CalendarSettingsSection } from "../components/CalendarSettingsSection";
 import { useCardScroll } from "../lib/cardKeys";
+import { notifyPermission, notifyPrefEnabled, requestNotifyPermission, setNotifyPref } from "../lib/notifications";
 
 type Tab = "profile" | "preferences" | "accounts" | "domains" | "calendar" | "ai" | "security";
 const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
@@ -673,7 +674,42 @@ export function PreferencesSection({ compact }: { compact?: boolean }) {
           </div>
         </Row>
       </Section>
+      <NotificationsSection compact={compact} />
     </>
+  );
+}
+
+function NotificationsSection({ compact }: { compact?: boolean }) {
+  const [permission, setPermission] = useState(notifyPermission);
+  const [pref, setPref] = useState(notifyPrefEnabled);
+  const on = permission === "granted" && pref;
+  const toggle = async (v: boolean) => {
+    if (!v) {
+      setNotifyPref(false);
+      setPref(false);
+      return;
+    }
+    if (permission === "granted") {
+      setNotifyPref(true);
+      setPref(true);
+      return;
+    }
+    const p = await requestNotifyPermission();
+    setPermission(p);
+    setPref(p === "granted");
+  };
+  const hint =
+    permission === "unsupported"
+      ? "Not supported in this browser."
+      : permission === "denied"
+        ? "Blocked in this browser — allow notifications for this site to turn it back on."
+        : "A browser notification when new mail lands in the Imbox, while this tab isn't the one you're looking at.";
+  return (
+    <Section title="Notifications">
+      <Row label="New mail" hint={hint}>
+        <Switch checked={on} disabled={permission === "unsupported" || permission === "denied"} onCheckedChange={toggle} className={compact ? "scale-110" : undefined} />
+      </Row>
+    </Section>
   );
 }
 

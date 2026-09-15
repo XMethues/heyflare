@@ -3,6 +3,7 @@ import type { CalEvent } from "@shared/types";
 import { cn } from "@/lib/utils";
 import { useCalendar } from "./CalendarContext";
 import { AllDayPill, TimedRow } from "./EventBlock";
+import { circledColor } from "./colors";
 import { dateKey, daysBetween, monthGrid, monthShort, weekdayShort } from "../lib/caldate";
 
 /**
@@ -199,6 +200,7 @@ function WeekRow({
                 d === today && "bg-foreground text-background",
                 d !== today && d === cursor && "border border-foreground",
               )}
+              style={(() => { const c = circledColor(eventsOn(d)); return c ? { boxShadow: `0 0 0 2px ${c}` } : undefined; })()}
             >
               {d.slice(8) === "01" ? `${monthShort(d)} 1` : Number(d.slice(8))}
             </span>

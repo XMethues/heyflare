@@ -285,13 +285,18 @@ export interface AiSettings {
   presets: AiPreset[];
   last_learned_at: number | null;
   server_ready: boolean;
+  mem0_mode: "own" | "mem0" | "both";
+  mem0_base_url: string;
+  mem0_key_hint: string;
+  mem0_user_id: string;
+  mem0_last_synced_at: number | null;
 }
 export type AiMemoryKind = "profile" | "tone" | "fact" | "preference" | "contact";
 export interface AiMemoryEntry {
   id: string;
   kind: AiMemoryKind;
   content: string;
-  source: "user" | "assistant" | "learned";
+  source: "user" | "assistant" | "learned" | "mem0";
   created_at: number;
   updated_at: number;
 }
@@ -397,19 +402,6 @@ export interface CalEvent {
   updated_at: number;
 }
 
-export interface Habit {
-  id: string;
-  name: string;
-  icon: string;
-  color: string;
-  days: number[];
-  position: number;
-  archived: boolean;
-  /** YYYY-MM-DD values inside the requested window. */
-  completions?: string[];
-  streak?: number;
-}
-
 export interface FlexTask {
   id: string;
   week_start: string;
@@ -447,15 +439,6 @@ export interface CalendarDay {
   journal_updated_at: number | null;
 }
 
-export interface JournalEntry extends CalendarDay {
-  journal_html: string;
-}
-
-/** A row of the journal index: the day, plus the first plain-text line of its entry. */
-export interface JournalIndexEntry extends CalendarDay {
-  excerpt: string;
-}
-
 export interface CalendarSettings {
   timezone: string;
   week_start: number;
@@ -473,7 +456,6 @@ export interface CalendarRange {
   from: string;
   to: string;
   events: CalEvent[];
-  habits: Habit[];
   days: CalendarDay[];
   flex_tasks: FlexTask[];
   time_entries: TimeEntry[];

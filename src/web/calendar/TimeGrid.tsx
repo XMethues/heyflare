@@ -4,7 +4,8 @@ import { cn } from "@/lib/utils";
 import { useToast } from "../components/Toast";
 import { useCalendar } from "./CalendarContext";
 import { AllDayPill, TimedBlock } from "./EventBlock";
-import { useDark } from "./colors";
+import { circledColor, useDark } from "./colors";
+import { DayCoverButton } from "./DayCoverPicker";
 import {
   DRAG_SLOP_PX,
   MIN_EVENT_MS,
@@ -347,7 +348,7 @@ export function TimeGrid({ days, single, pager }: { days: string[]; single?: boo
       <div className="flex shrink-0 border-b border-border" style={{ height: HEADER_PX }}>
         <div className="shrink-0" style={{ width: GUTTER_PX }} />
         {days.map((d) => (
-          <DayHead key={d} date={d} today={d === today} cursor={d === cursor} single={!!single} />
+          <DayHead key={d} date={d} today={d === today} cursor={d === cursor} single={!!single} circle={circledColor(eventsOn(d))} />
         ))}
       </div>
 
@@ -450,7 +451,7 @@ export function TimeGrid({ days, single, pager }: { days: string[]; single?: boo
 }
 
 /** `Mon 9` — or `Wednesday 9` in the day view. Today's number sits in a filled circle; the cursor's in a ring. */
-function DayHead({ date, today, cursor, single }: { date: string; today: boolean; cursor: boolean; single: boolean }) {
+function DayHead({ date, today, cursor, single, circle }: { date: string; today: boolean; cursor: boolean; single: boolean; circle: string | null }) {
   return (
     <div className="flex min-w-0 flex-1 items-center justify-center gap-1 text-[13px]">
       <span className="truncate text-muted-foreground">{single ? weekdayLabel(date) : weekdayShort(date)}</span>
@@ -460,9 +461,11 @@ function DayHead({ date, today, cursor, single }: { date: string; today: boolean
           today && "bg-foreground text-background",
           !today && cursor && "border border-foreground",
         )}
+        style={circle ? { boxShadow: `0 0 0 2px ${circle}` } : undefined}
       >
         {Number(date.slice(8))}
       </span>
+      <DayCoverButton date={date} />
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { useAccountMutations, useImbox } from "../api";
 import { ThreadList } from "../components/ThreadList";
 import { Piles } from "../components/Trays";
 import { CalendarCover } from "../calendar/CalendarCover";
+import { NotifyBanner } from "../components/NotifyBanner";
 import { Avatar } from "../components/Avatar";
 import { fmtRelative } from "../lib/format";
 import { useKeys } from "../lib/keys";
@@ -58,10 +59,10 @@ export default function Imbox() {
         <h1 className="text-[28px] leading-[34px] font-bold tracking-[-0.02em]">Imbox</h1>
         <div className="flex items-center gap-3 mt-1 min-h-5">
           {scopeLabel && <span className="text-xs text-muted-foreground">{scopeLabel}</span>}
-          <SyncPill />
         </div>
       </header>
 
+      <NotifyBanner />
       <CalendarCover />
 
       {!!d?.screener_count && (

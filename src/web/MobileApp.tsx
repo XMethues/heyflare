@@ -7,6 +7,8 @@ import { page, warm } from "./lib/lazy";
 
 // One chunk per screen; the Imbox ships with the shell because it is where a session lands.
 const MobileFeed = page(() => import("./mobile/MobileFeed"));
+const feed = () => import("./mobile/MobileFeed");
+const MobilePaperTrail = page(() => feed().then((m) => ({ default: () => <m.MobileFeedPage bucket="paper_trail" /> })));
 const MobilePowerThrough = page(() => import("./mobile/MobilePowerThrough"));
 const MobileScreener = page(() => import("./mobile/MobileScreener"));
 const MobileThread = page(() => import("./mobile/MobileThread"));
@@ -42,8 +44,6 @@ const MobileAssistantList = page(() => assistant().then((m) => ({ default: m.Mob
 const MobileAssistantChat = page(() => assistant().then((m) => ({ default: m.MobileAssistantChat })));
 
 // Shared with the desktop app, and a separate chunk in both.
-const Journal = page(() => import("./pages/Journal"));
-const Habits = page(() => import("./pages/Habits"));
 const ScreenedOut = page(() => import("./pages/ScreenedOut"));
 const Labels = page(() => import("./pages/Labels"));
 const ComposePage = page(() => import("./pages/Compose"));
@@ -68,14 +68,11 @@ export default function MobileApp() {
         <Route path="/" element={<MobileImbox />} />
         <Route path="/feed" element={<MobileFeed />} />
         <Route path="/power-through" element={<MobilePowerThrough />} />
-        <Route path="/paper-trail" element={<MobileBucket bucket="paper_trail" />} />
+        <Route path="/paper-trail" element={<MobilePaperTrail />} />
         <Route path="/screener" element={<MobileScreener />} />
         <Route path="/more" element={<MobileMore />} />
         <Route path="/calendar" element={<MobileCalendar />} />
         <Route path="/calendar/:date" element={<MobileDay />} />
-        <Route path="/journal" element={wrap("", <Journal />)} />
-        <Route path="/journal/:date" element={wrap("", <Journal />)} />
-        <Route path="/habits" element={wrap("", <Habits />)} />
         <Route path="/screened-out" element={wrap("", <ScreenedOut />)} />
         <Route path="/reply-later" element={<MobileBucket key="rl" bucket="reply_later" back />} />
         <Route path="/set-aside" element={<MobileBucket key="sa" bucket="set_aside" back />} />

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { ArrowUpCircle, BookOpen, Bookmark, CalendarClock, CalendarDays, Repeat, Check, ChevronDown, ChevronRight, Clock, Eye, FileText, Files, FolderOpen, Inbox, Keyboard, Layers, LogOut, Mail, Monitor, Moon, PenSquare, Plus, Rss, Scissors, Search, Send, Settings, Shield, ShieldOff, Sun, Tag, Trash2, Users, Sparkles } from "lucide-react";
+import { ArrowUpCircle, Bookmark, CalendarClock, CalendarDays, Check, ChevronDown, ChevronRight, Clock, Eye, FileText, Files, FolderOpen, Inbox, Keyboard, Layers, LogOut, Mail, Monitor, Moon, PenSquare, Plus, Rss, Scissors, Search, Send, Settings, Shield, ShieldOff, Sun, Tag, Trash2, Users, Sparkles } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { Mark } from "./Logo";
@@ -8,8 +8,9 @@ import { isNative, isMac, native, onMenu, installExternalLinkHandler } from "../
 import { startGoogleConnect, startMicrosoftConnect } from "../lib/connect";
 import { ALL, useAccount } from "../context/AccountContext";
 import { useCompose } from "../context/ComposeContext";
-import { api, useCounts, useMailChanges, useMeMutations } from "../api";
+import { api, useCounts, useMailChanges, useMeMutations, useNewMailNotifier } from "../api";
 import { useKeys } from "../lib/keys";
+import { clearPersistedCache } from "../lib/persistedCache";
 import { arrows, focus, overlayOpen, useFocusRegion } from "../lib/focusStore";
 import { Avatar } from "./Avatar";
 import { CommandPalette } from "./CommandPalette";
@@ -17,6 +18,7 @@ import { AssistantPanel } from "./AssistantPanel";
 import { assistant, useAssistant } from "../lib/assistantStore";
 import { ShortcutsOverlay } from "./ShortcutsOverlay";
 import { UpdateDialog } from "./UpdateDialog";
+import { SyncPill } from "./SyncPill";
 import { useUpdateCheck } from "../lib/update";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarRail, SidebarTrigger, useSidebar,
@@ -38,7 +40,7 @@ const TITLES: [string, string][] = [
   ["/feed", "The Feed"], ["/paper-trail", "Paper Trail"], ["/power-through", "Power through new"], ["/screener", "Screener"], ["/screened-out", "Screened out"], ["/reply-later", "Reply Later"],
   ["/set-aside", "Set Aside"], ["/bubble-up", "Bubble Up"], ["/previously-seen", "Previously Seen"], ["/contacts", "Contacts"], ["/clips", "Clips"],
   ["/collections", "Collections"], ["/files", "Files"], ["/labels", "Labels"], ["/sent", "Sent"], ["/drafts", "Drafts"], ["/scheduled", "Scheduled"],
-  ["/everything", "Everything"], ["/trash", "Trash"], ["/settings", "Settings"], ["/search", "Search"], ["/compose", "New message"], ["/t/", "Thread"], ["/bundle/", "Bundle"], ["/assistant", "Assistant"], ["/calendar", "Calendar"], ["/journal", "Journal"], ["/habits", "Habits"],
+  ["/everything", "Everything"], ["/trash", "Trash"], ["/settings", "Settings"], ["/search", "Search"], ["/compose", "New message"], ["/t/", "Thread"], ["/bundle/", "Bundle"], ["/assistant", "Assistant"], ["/calendar", "Calendar"],
 ];
 function pageTitle(path: string): string {
   if (path === "/") return "Imbox";
@@ -211,6 +213,7 @@ function TopBar() {
           </>
         )}
       </div>
+      <SyncPill className="hidden sm:inline-flex shrink-0" />
       <span className="flex-1" />
       <button type="button" onClick={() => setOverlay({ palette: true })} className="md:hidden size-8 inline-flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground" aria-label="Search">
         <Search size={16} />
@@ -224,6 +227,7 @@ function AppSidebar() {
   const { user, accounts, account, scope, setScope, glyphFor, googleConfigured, microsoftConfigured } = useAccount();
   const counts = useCounts(accounts.length > 0);
   useMailChanges(accounts.length > 0);
+  useNewMailNotifier(accounts.length > 0);
   const update = useUpdateCheck();
   const { openCompose } = useCompose();
   const { theme, setTheme } = useTheme();
@@ -260,6 +264,7 @@ function AppSidebar() {
   const logout = async () => {
     await api.post("/auth/logout");
     qc.clear();
+    clearPersistedCache();
     nav("/login");
   };
 
@@ -285,8 +290,6 @@ function AppSidebar() {
     { to: "/drafts", label: "Drafts", icon: <PenSquare /> },
   ];
   const more: NavItem[] = [
-    { to: "/journal", label: "Journal", icon: <BookOpen /> },
-    { to: "/habits", label: "Habits", icon: <Repeat /> },
     { to: "/sent", label: "Sent", icon: <Send /> },
     { to: "/scheduled", label: "Scheduled", icon: <CalendarClock /> },
     { to: "/everything", label: "Everything", icon: <Mail /> },

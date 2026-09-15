@@ -66,8 +66,6 @@ function CalendarInner() {
     m: () => ok() && setView("month"),
     y: () => ok() && setView("year"),
     n: () => ok() && createEvent({ starts_at: msAt(cursor, 9 * 60), ends_at: msAt(cursor, 10 * 60) }),
-    j: () => ok() && nav(`/journal/${cursor}`),
-    b: () => ok() && nav("/habits"),
   });
 
   return (

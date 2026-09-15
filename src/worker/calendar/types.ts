@@ -67,19 +67,6 @@ export interface EventRow {
   updated_at: number;
 }
 
-export interface HabitRow {
-  id: string;
-  user_id: string;
-  name: string;
-  icon: string;
-  color: string;
-  days: string;
-  position: number;
-  archived: number;
-  created_at: number;
-  updated_at: number;
-}
-
 export interface CalendarDayRow {
   user_id: string;
   date: string;

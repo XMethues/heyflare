@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowUpCircle, Bookmark, BookOpen, CalendarClock, CalendarDays, ChevronRight, Clock, Eye, FileText, Files, FolderOpen, LogOut, Mail, Monitor, Moon, PenSquare, Repeat, Scissors, Search, Send, Settings, ShieldOff, Sun, Tag, Trash2, Users, Sparkles, Rss } from "lucide-react";
+import { ArrowUpCircle, Bookmark, CalendarClock, CalendarDays, ChevronRight, Clock, Eye, FileText, Files, FolderOpen, LogOut, Mail, Monitor, Moon, PenSquare, Scissors, Search, Send, Settings, ShieldOff, Sun, Tag, Trash2, Users, Sparkles, Rss } from "lucide-react";
 import { api, useCounts, useMeMutations } from "../api";
 import { useAccount } from "../context/AccountContext";
 import { Avatar } from "../components/Avatar";
@@ -9,6 +9,7 @@ import { Screen } from "./Screen";
 import { ActionSheet } from "./ActionSheet";
 import { useUpdateCheck } from "../lib/update";
 import { UpdateDialog } from "../components/UpdateDialog";
+import { clearPersistedCache } from "../lib/persistedCache";
 
 function Row({ to, icon, label, count, onClick, hint }: { to?: string; icon: ReactNode; label: string; count?: number; onClick?: () => void; hint?: string }) {
   const inner = (
@@ -51,6 +52,7 @@ export default function MobileMore() {
   const logout = async () => {
     await api.post("/auth/logout");
     qc.clear();
+    clearPersistedCache();
     nav("/login");
   };
   const setTheme = (t: "light" | "dark" | "system") => update.mutate({ settings: { ...(user?.settings ?? {}), theme: t } });
@@ -71,8 +73,6 @@ export default function MobileMore() {
       </Group>
       <Group title="Calendar">
         <Row to="/calendar" icon={<CalendarDays />} label="Calendar" />
-        <Row to="/journal" icon={<BookOpen />} label="Journal" />
-        <Row to="/habits" icon={<Repeat />} label="Habits" />
       </Group>
       <Group title="Trays">
         <Row to="/reply-later" icon={<Clock />} label="Reply Later" count={c?.reply_later} />

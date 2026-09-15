@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { ALL, useAccount } from "../context/AccountContext";
 import { useAccountMutations } from "../api";
 import { fmtRelative } from "../lib/format";
+import { AccountGlyph } from "./Avatar";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 
@@ -30,7 +31,7 @@ export function ConnectGmailCard() {
 }
 
 export function SyncPill({ className }: { className?: string }) {
-  const { account, accounts, scope } = useAccount();
+  const { account, accounts, scope, glyphFor } = useAccount();
   const { sync } = useAccountMutations();
   const targets = scope === ALL ? accounts : account ? [account] : [];
   const busy = targets.filter((a) => !a.initial_sync_done || a.sync_status === "syncing");
@@ -38,17 +39,20 @@ export function SyncPill({ className }: { className?: string }) {
   if (busy.length === 0 && broken.length === 0) return null;
   const a = broken[0] ?? busy[0];
   const error = broken.length > 0;
+  // Which account, on hover — not spelled out inline, which used to read as "the account switcher
+  // is telling you your own email address" every time more than one account was busy syncing.
+  const which = targets.length > 1 ? <AccountGlyph glyph={glyphFor(a.id)} label={a.email} className="mx-0.5" /> : null;
   return (
     <div className={cn("inline-flex items-center gap-2 text-xs text-muted-foreground", className)}>
       {error ? <RefreshCw size={13} /> : <Loader2 size={13} className="animate-spin" />}
       {error ? (
         <span>
-          Sync problem{targets.length > 1 ? ` (${a.email})` : ""}: {a.sync_error || "unknown"}.{" "}
+          Sync problem{which}: {a.sync_error || "unknown"}.{" "}
           {a.sync_status === "disconnected" && <a href="/auth/google/start" className="underline underline-offset-2 hover:text-foreground">Reconnect</a>}
         </span>
       ) : (
         <span>
-          Syncing{targets.length > 1 ? ` ${a.email}` : ""} <span className="tnum">· {a.initial_sync_count} messages</span>
+          Syncing{which} <span className="tnum">· {a.initial_sync_count} messages</span>
           {a.last_synced_at ? <span> · {fmtRelative(a.last_synced_at)}</span> : null}
         </span>
       )}

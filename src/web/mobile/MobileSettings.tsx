@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { api, domainErrorMessage, useAccountMutations, useDomainMutations, useDomains, useMeMutations } from "../api";
 import { useAccount } from "../context/AccountContext";
 import { Avatar, AccountGlyph } from "../components/Avatar";
+import { clearPersistedCache } from "../lib/persistedCache";
 import { fmtRelative } from "../lib/format";
 import { startGoogleConnect, startMicrosoftConnect } from "../lib/connect";
 import { AddDomainDialog, AddImapDialog, CopyButton, Danger, DomainBadges, NewMailboxDialog, PreferencesSection, ProfileSection, SecuritySection, statusOf } from "../pages/Settings";
@@ -71,6 +72,7 @@ export default function MobileSettings() {
   const logout = async () => {
     await api.post("/auth/logout");
     qc.clear();
+    clearPersistedCache();
     nav("/login");
   };
   if (!user) return null;

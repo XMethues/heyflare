@@ -135,7 +135,14 @@ export function ThreadList({
   const cur = cursor >= 0 ? items[cursor] : undefined;
   const curThread = cur?.kind === "thread" ? cur.t : undefined;
   // Bundles take a cursor slot but no thread actions: with one focused, targets() is empty and act() no-ops.
-  const targets = () => (selected.size ? [...selected] : curThread ? [curThread.id] : []);
+  // Before j/k or a click ever moves the cursor off -1, a shortcut like `e` still acts on the top
+  // row — the one you're looking at when the page first loads — instead of silently doing nothing.
+  const targets = () => {
+    if (selected.size) return [...selected];
+    if (curThread) return [curThread.id];
+    const first = cursor < 0 ? items[0] : undefined;
+    return first?.kind === "thread" ? [first.t.id] : [];
+  };
 
   /** Animate rows out, then run the mutation. */
   const act = useCallback(

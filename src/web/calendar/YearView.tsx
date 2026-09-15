@@ -1,12 +1,12 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useCalendar } from "./CalendarContext";
-import { useDark } from "./colors";
+import { circledColor, useDark } from "./colors";
 import { addDays, daysBetween, keyToDate, monthEndOf, monthName, weekStartOf } from "../lib/caldate";
 
 /**
- * The year: twelve small months, Apple style. A day is bold when something is on it, carries a
- * dot when the journal has an entry for it, and opens the day view when clicked.
+ * The year: twelve small months, Apple style. A day is bold when something is on it, and opens
+ * the day view when clicked.
  */
 
 /** A day cell, and the weekday letters above the first row. */
@@ -24,7 +24,7 @@ const RED_DARK = "#ff453a";
 const LETTERS = ["S", "M", "T", "W", "T", "F", "S"];
 
 export function YearView() {
-  const { cursor, setCursor, setView, today, settings, range, eventsOn, revealAt } = useCalendar();
+  const { cursor, setCursor, setView, today, settings, range, eventsOn, dayInfo, revealAt } = useCalendar();
   const dark = useDark();
   const year = cursor.slice(0, 4);
 
@@ -44,7 +44,6 @@ export function YearView() {
     return () => ro.disconnect();
   }, []);
 
-  const journal = useMemo(() => new Set((range?.days ?? []).filter((d) => d.has_journal).map((d) => d.date)), [range?.days]);
   const busy = (d: string) => {
     const { allDay, timed } = eventsOn(d);
     return allDay.length + timed.length > 0;
@@ -95,6 +94,10 @@ export function YearView() {
                   const d = addDays(gridStart, i);
                   if (d < first || d > last) return <div key={i} style={{ height: CELL_PX }} />;
                   const isToday = d === today;
+                  const circle = circledColor(eventsOn(d));
+                  // Week view is the only place a cover gets set; here it's just reflected, scoped
+                  // tight to the day number itself since a year grid's cells have no room to spare.
+                  const cover = !isToday ? dayInfo(d) : undefined;
                   return (
                     <button
                       key={i}
@@ -106,15 +109,19 @@ export function YearView() {
                     >
                       <span
                         className={cn(
-                          "inline-flex size-6 items-center justify-center rounded-full",
+                          "inline-flex size-6 items-center justify-center rounded-full bg-cover bg-center",
                           busy(d) && "font-semibold",
                           isToday && "bg-foreground text-background",
                           !isToday && d === cursor && "border border-foreground",
+                          cover?.cover_url && "text-white [text-shadow:0_1px_2px_rgb(0_0_0_/_0.7)]",
                         )}
+                        style={{
+                          ...(circle ? { boxShadow: `0 0 0 2px ${circle}` } : undefined),
+                          ...(cover?.cover_url ? { backgroundImage: `url(${cover.cover_url})`, backgroundPosition: cover.cover_position || "50% 50%" } : undefined),
+                        }}
                       >
                         {keyToDate(d).getDate()}
                       </span>
-                      {journal.has(d) && <span className="absolute bottom-[2px] left-1/2 size-[3px] -translate-x-1/2 rounded-full bg-foreground/50" />}
                     </button>
                   );
                 })}

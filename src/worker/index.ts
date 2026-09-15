@@ -17,6 +17,7 @@ import composeRoutes from "./routes/compose";
 import bundleRoutes from "./routes/bundles";
 import aiRoutes from "./routes/ai";
 import { runLearning } from "./ai/memory";
+import { runMem0Sync } from "./ai/mem0";
 import domainRoutes from "./routes/domains";
 import oauthRoutes from "./routes/oauth";
 import calendarRoutes from "./routes/calendar";
@@ -137,6 +138,11 @@ async function runCron(env: Env) {
     await processScheduledSends(env);
   } catch (e) {
     console.error("scheduled sends failed", e);
+  }
+  try {
+    await runMem0Sync(env);
+  } catch (e) {
+    console.error("mem0 sync failed", e);
   }
   try {
     await runLearning(env);

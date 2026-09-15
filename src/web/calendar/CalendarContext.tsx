@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { CalEvent, Calendar, CalendarRange, CalendarSettings, CalendarView } from "@shared/types";
+import type { CalEvent, Calendar, CalendarDay, CalendarRange, CalendarSettings, CalendarView } from "@shared/types";
 import { useCalendarRange, useCalendarSettings, useCalendarSources } from "../api";
 import { addDays, addMonths, daysBetween, minutesOfDay, monthEndOf, monthStartOf, todayKey } from "../lib/caldate";
 import { fitWindow, makeScale, type TimeScale } from "./scale";
@@ -44,6 +44,8 @@ interface CalendarCtx {
   closeEditor: () => void;
   /** Events for one day, already filtered and split into all-day and timed. */
   eventsOn: (date: string) => { allDay: CalEvent[]; timed: CalEvent[] };
+  /** The cover photo and journal flag for one day, if the loaded window covers it. */
+  dayInfo: (date: string) => CalendarDay | undefined;
 }
 
 const Ctx = createContext<CalendarCtx | null>(null);
@@ -153,6 +155,13 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
 
   const eventsOn = useCallback((date: string) => byDay.get(date) ?? EMPTY_DAY, [byDay]);
 
+  const byDate = useMemo(() => {
+    const map = new Map<string, CalendarDay>();
+    for (const d of rangeQ.data?.days ?? []) map.set(d.date, d);
+    return map;
+  }, [rangeQ.data]);
+  const dayInfo = useCallback((date: string) => byDate.get(date), [byDate]);
+
   const value: CalendarCtx = {
     settings,
     calendars: sourcesQ.data?.calendars ?? [],
@@ -177,6 +186,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     createEvent: (prefill) => setEditor({ mode: "create", prefill }),
     closeEditor: () => setEditor(null),
     eventsOn,
+    dayInfo,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

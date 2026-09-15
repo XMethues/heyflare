@@ -501,34 +501,44 @@ export async function loadBundles(db: D1Database, accountIds: string[], bucket: 
     .bind(...sc.params, bucket, now_)
     .all<BundleRow & { contact_name: string | null; contact_avatar: string | null }>();
   if (!rows.results.length) return [];
+  // The per-bundle lookups below are independent, but hundreds of them run in sequence would mean
+  // hundreds of round trips before the response goes out — fan them out in bounded waves instead.
   const out: Bundle[] = [];
-  for (const b of rows.results) {
-    const latestRow = await db
-      .prepare(
-        `SELECT t.* FROM threads t WHERE t.bundle_id = ? AND t.bucket = ? AND t.merged_into IS NULL AND t.reply_later = 0 AND t.set_aside = 0 AND (t.bubble_up_at IS NULL OR t.bubble_up_at <= ?) ORDER BY t.last_message_at DESC LIMIT 1`
-      )
-      .bind(b.id, bucket, now_)
-      .first<ThreadRow>();
-    if (!latestRow) continue;
-    const counts = await db
-      .prepare(`SELECT COUNT(*) AS threads, COALESCE(SUM(message_count), 0) AS messages FROM threads t WHERE t.bundle_id = ? AND t.merged_into IS NULL AND t.reply_later = 0 AND t.set_aside = 0`)
-      .bind(b.id)
-      .first<{ threads: number; messages: number }>();
-    const [latest] = await attachAvatars(db, [toThreadSummary(latestRow, [])]);
-    out.push({
-      id: b.id,
-      contact_id: b.contact_id,
-      account_id: b.account_id,
-      email: b.email,
-      name: b.contact_name || latest.last_from.name || b.email,
-      avatar_url: b.contact_avatar || latest.last_from.avatar_url || "",
-      status: b.status,
-      thread_count: counts?.threads ?? b.thread_count,
-      message_count: counts?.messages ?? b.message_count,
-      latest,
-      first_message_at: b.first_message_at,
-      last_message_at: b.last_message_at,
-    });
+  for (const part of chunk(rows.results, 25)) {
+    const settled = await Promise.all(
+      part.map(async (b) => {
+        const [latestRow, counts] = await Promise.all([
+          db
+            .prepare(
+              `SELECT t.* FROM threads t WHERE t.bundle_id = ? AND t.bucket = ? AND t.merged_into IS NULL AND t.reply_later = 0 AND t.set_aside = 0 AND (t.bubble_up_at IS NULL OR t.bubble_up_at <= ?) ORDER BY t.last_message_at DESC LIMIT 1`
+            )
+            .bind(b.id, bucket, now_)
+            .first<ThreadRow>(),
+          db
+            .prepare(`SELECT COUNT(*) AS threads, COALESCE(SUM(message_count), 0) AS messages FROM threads t WHERE t.bundle_id = ? AND t.merged_into IS NULL AND t.reply_later = 0 AND t.set_aside = 0`)
+            .bind(b.id)
+            .first<{ threads: number; messages: number }>(),
+        ]);
+        if (!latestRow) return null;
+        const [latest] = await attachAvatars(db, [toThreadSummary(latestRow, [])]);
+        const out: Bundle = {
+          id: b.id,
+          contact_id: b.contact_id,
+          account_id: b.account_id,
+          email: b.email,
+          name: b.contact_name || latest.last_from.name || b.email,
+          avatar_url: b.contact_avatar || latest.last_from.avatar_url || "",
+          status: b.status,
+          thread_count: counts?.threads ?? b.thread_count,
+          message_count: counts?.messages ?? b.message_count,
+          latest,
+          first_message_at: b.first_message_at,
+          last_message_at: b.last_message_at,
+        };
+        return out;
+      })
+    );
+    for (const b of settled) if (b) out.push(b);
   }
   return out;
 }

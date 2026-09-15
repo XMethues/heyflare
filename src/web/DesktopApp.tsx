@@ -31,8 +31,6 @@ const LabelThreads = page(() => import("./pages/LabelThreads"));
 const SettingsPage = page(() => import("./pages/Settings"));
 const Assistant = page(() => import("./pages/Assistant"));
 const CalendarPage = page(() => import("./pages/Calendar"));
-const Journal = page(() => import("./pages/Journal"));
-const Habits = page(() => import("./pages/Habits"));
 const SearchPage = page(() => import("./pages/Search"));
 const NotFound = page(() => import("./pages/NotFound"));
 
@@ -80,9 +78,6 @@ export default function DesktopApp() {
         <Route path="/collections/:id" element={<CollectionDetail />} />
         <Route path="/files" element={<FilesPage />} />
         <Route path="/calendar" element={<CalendarPage />} />
-        <Route path="/journal" element={<Journal />} />
-        <Route path="/journal/:date" element={<Journal />} />
-        <Route path="/habits" element={<Habits />} />
         <Route path="/assistant" element={<Assistant />} />
         <Route path="/assistant/:id" element={<Assistant />} />
         <Route path="/settings" element={<SettingsPage />} />

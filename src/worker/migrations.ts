@@ -22,6 +22,11 @@ import m0017 from "../../migrations/0017_imap.sql";
 import m0018 from "../../migrations/0018_oauth_credentials.sql";
 import m0019 from "../../migrations/0019_oauth_override.sql";
 import m0020 from "../../migrations/0020_calendar_writes.sql";
+import m0021 from "../../migrations/0021_removed_calendars.sql";
+import m0022 from "../../migrations/0022_threads_updated_index.sql";
+import m0023 from "../../migrations/0023_mem0_sync.sql";
+import m0024 from "../../migrations/0024_mem0_mode.sql";
+import m0025 from "../../migrations/0025_mem0_user_id.sql";
 
 export const MIGRATIONS: { name: string; sql: string }[] = [
   { name: "0001_init.sql", sql: m0001 },
@@ -44,6 +49,11 @@ export const MIGRATIONS: { name: string; sql: string }[] = [
   { name: "0018_oauth_credentials.sql", sql: m0018 },
   { name: "0019_oauth_override.sql", sql: m0019 },
   { name: "0020_calendar_writes.sql", sql: m0020 },
+  { name: "0021_removed_calendars.sql", sql: m0021 },
+  { name: "0022_threads_updated_index.sql", sql: m0022 },
+  { name: "0023_mem0_sync.sql", sql: m0023 },
+  { name: "0024_mem0_mode.sql", sql: m0024 },
+  { name: "0025_mem0_user_id.sql", sql: m0025 },
 ];
 
 /** Split a migration file into statements: full-line comments dropped, split on `;` at end of line. */

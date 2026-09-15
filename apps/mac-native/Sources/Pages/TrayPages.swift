@@ -177,97 +177,25 @@ private struct UpNextRow: View {
     }
 }
 
-/// `SetAside.tsx`: cards on a board.
+/// `SetAside.tsx`: a plain list, the same row style as everywhere else (and Reply Later's "Up next").
 struct SetAsidePage: View {
     @Environment(AppState.self) private var app
-    @Environment(Router.self) private var router
-    @Environment(UIState.self) private var ui
     @State private var imbox = ImboxStore()
-    @State private var leaving: Set<String> = []
-    @State private var cursor = -1
 
     private var list: [ThreadSummary] { imbox.data.setAside }
 
     var body: some View {
         if app.accounts.isEmpty { ConnectGmailCard() } else {
-            PageColumn(width: 1100) {
+            PageColumn {
                 PageHeader(title: "Set Aside", subtitle: list.isEmpty ? "Things you want close at hand. Confirmations, links, reference numbers." : "\(list.count) set aside. Things you want close at hand.")
-                if let error = imbox.error { ErrorStateView(message: error) { Task { await imbox.refresh() } } }
-                else if imbox.loading && !imbox.loaded {
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 12) {
-                        ForEach(0..<3, id: \.self) { _ in
-                            VStack(alignment: .leading, spacing: 12) { PctSkeleton(pct: 0.5); PctSkeleton(pct: 0.8, height: 16); PctSkeleton(); PctSkeleton(pct: 0.7) }
-                                .padding(16).background(W.muted40).rounded(W.radiusMd)
-                        }
-                    }
-                } else if list.isEmpty { EmptyStateView(icon: "bookmark", title: "Nothing set aside.", body: "Press a on any thread to keep it handy here.") }
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12, alignment: .top), count: 3), alignment: .leading, spacing: 12) {
-                    ForEach(Array(list.enumerated()), id: \.element.id) { i, t in
-                        SetAsideCard(thread: t, focused: cursor == i, leaving: leaving.contains(t.id)) { done(t) }
-                            .id(t.id)
-                    }
-                }
+                ThreadListView(sections: [ListSection(threads: list, emptyTitle: "Nothing set aside.", emptyBody: "Press a on any thread to keep it handy here.")],
+                               loading: imbox.loading && !imbox.loaded, error: imbox.error, onRetry: { Task { await imbox.refresh() } },
+                               showBucket: true, emptyIcon: "bookmark",
+                               onAct: { ids, _, removes in if removes { ids.forEach { imbox.remove($0) } } })
             }
             .task { await imbox.load() }
             .syncsWithMail { await imbox.refresh() }
-            .itemCursorKeys(ids: list.map(\.id), cursor: $cursor) { i in if list.indices.contains(i) { router.go(.thread(list[i].id, peek: false)) } }
         }
-    }
-
-    private func done(_ t: ThreadSummary) {
-        leaving.insert(t.id)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-            imbox.remove(t.id)
-            leaving.remove(t.id)
-            Mail.bulk([t.id], .setAside(false), toast: "Back in the Imbox")
-        }
-    }
-}
-
-private struct SetAsideCard: View {
-    let thread: ThreadSummary
-    var focused = false
-    var leaving = false
-    var onDone: () -> Void
-    @Environment(AppState.self) private var app
-    @Environment(Router.self) private var router
-    @State private var subjectHover = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                WAvatar(thread.lastFrom, size: 20)
-                Text(thread.lastFrom.name.isEmpty ? thread.lastFrom.email : thread.lastFrom.name).font(W.s13).foregroundStyle(W.mutedForeground).lineLimit(1)
-                Spacer()
-                if app.accounts.count > 1 { AccountGlyph(glyph: app.glyph(for: thread.accountID), label: app.account(thread.accountID)?.email) }
-                Text(Fmt.time(thread.lastMessageAt)).font(W.xs).monospacedDigit().foregroundStyle(W.mutedForeground).help(Fmt.full(thread.lastMessageAt))
-            }
-            .padding(.horizontal, 16).padding(.top, 16)
-            Button { router.go(.thread(thread.id, peek: false)) } label: {
-                Text(thread.displaySubject).font(W.font(14, 600)).underline(subjectHover).lineSpacing(2).lineLimit(2).multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .onHover { subjectHover = $0 }
-            .padding(.horizontal, 16).padding(.top, 8)
-            Text(thread.snippet).font(W.s13).foregroundStyle(W.mutedForeground).lineSpacing(4).lineLimit(3).padding(.horizontal, 16).padding(.top, 4).frame(maxWidth: .infinity, alignment: .leading)
-            if !thread.note.isEmpty {
-                HStack(alignment: .top, spacing: 8) { Icon("stickyNote", size: 14).foregroundStyle(W.mutedForeground).padding(.top, 2); Text(thread.note).font(W.s13).lineLimit(2) }
-                    .padding(.horizontal, 12).padding(.vertical, 8).background(W.background).rounded(W.radiusMd).padding(.horizontal, 16).padding(.top, 12)
-            }
-            HStack(spacing: 6) {
-                if thread.hasAttachments { Icon("paperclip", size: 14).foregroundStyle(W.mutedForeground).help("Has attachments") }
-                if thread.trackersBlocked > 0 { Icon("shieldCheck", size: 14).foregroundStyle(W.mutedForeground).help("Blocked \(thread.trackersBlocked) spy tracker\(thread.trackersBlocked == 1 ? "" : "s")") }
-                ForEach(thread.labels.prefix(2)) { l in WBadge(l.name, variant: .outline, muted: true) }
-                Spacer()
-                WButton("Done", icon: "check", variant: .ghost, size: .sm, muted: true, help: "Back to the Imbox", action: onDone)
-            }
-            .padding(.horizontal, 12).padding(.vertical, 8).padding(.top, 12)
-        }
-        .background(W.muted40)
-        .overlay { if focused { RoundedRectangle(cornerRadius: W.radiusMd, style: .continuous).strokeBorder(W.ring, lineWidth: 1) } }
-        .rounded(W.radiusMd)
-        .opacity(leaving ? 0 : 1)
-        .animation(.easeOut(duration: 0.1), value: leaving)
     }
 }
 

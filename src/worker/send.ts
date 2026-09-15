@@ -106,13 +106,6 @@ interface DomainSendCtx {
 const fmt = (a: Address) => (a.name ? `${a.name.replace(/[<>"]/g, "")} <${a.email}>` : a.email);
 
 /**
- * Cloudflare's Email Service takes an address as a plain string or as `{email, name}`. It does not
- * document the `Name <addr>` form, so say it the way the API asks rather than hoping its parser is
- * forgiving.
- */
-const addr = (a: Address) => (a.name ? { email: a.email, name: a.name.replace(/[<>"]/g, "") } : { email: a.email });
-
-/**
  * The headers Cloudflare will accept from us. Its allowlist is narrow and unforgiving: a header
  * that is not on it — or that it considers its own — fails the *whole* send rather than being
  * dropped. `Message-ID` is the one that matters here, because Cloudflare generates its own and
@@ -162,10 +155,10 @@ async function sendFromDomainMailbox(env: Env, account: AccountRow, p: SendParam
   if (env.EMAIL && typeof env.EMAIL.send === "function") {
     try {
       const sent = await env.EMAIL.send({
-        from: addr(ctx.from),
-        to: p.to.map(addr),
-        cc: cc.length ? (p.cc ?? []).map(addr) : undefined,
-        bcc: bcc.length ? (p.bcc ?? []).map(addr) : undefined,
+        from: fmt(ctx.from),
+        to,
+        cc: cc.length ? cc : undefined,
+        bcc: bcc.length ? bcc : undefined,
         subject: ctx.subject,
         html: p.body_html,
         text,

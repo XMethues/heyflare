@@ -1,7 +1,7 @@
 import { Repeat } from "lucide-react";
 import type { CalEvent } from "@shared/types";
 import { cn } from "@/lib/utils";
-import { eventBar, eventFill, eventInk, useDark } from "./colors";
+import { eventBar, eventFill, eventInk, eventTentativeFill, eventTentativeInk, useDark } from "./colors";
 import { handlePx, type DragMode } from "./dragEvent";
 import { shortRange, shortTime } from "../lib/caldate";
 
@@ -9,8 +9,8 @@ import { shortRange, shortTime } from "../lib/caldate";
  * The three shapes an event takes, Apple Calendar style: a timed block in the day columns, an
  * all-day pill in the banner row (and the month grid), and a one-line row in a month cell.
  *
- * Every one of them is a wash of the calendar's colour with the title in the colour itself; the
- * chrome around them stays monochrome.
+ * A confirmed event is a solid wash of the calendar's colour with white or near-black text,
+ * whichever reads; a tentative one stays a light, hollow-feeling wash instead, colour on colour.
  */
 
 /** True when the event is only provisionally on the calendar — the organiser's or the user's doubt. */
@@ -61,7 +61,7 @@ export function TimedBlock({
   const declined = e.rsvp === "declined";
   const tentative = isTentative(e);
   const struck = declined || e.done;
-  const ink = eventInk(e.calendar_color, dark);
+  const ink = tentative ? eventTentativeInk(e.calendar_color, dark) : eventInk(e.calendar_color);
   const bar = eventBar(e.calendar_color);
 
   // Two pixels of air either side of the column, and a hairline between neighbours.
@@ -79,8 +79,8 @@ export function TimedBlock({
         onPointerDown={draggable ? (ev) => onDragStart!(ev, "move") : undefined}
         title={`${title} · ${shortRange(e.starts_at, e.ends_at, format)}`}
         style={{
-          ["--fill" as string]: eventFill(e.calendar_color, tentative ? 0.22 * 0.6 : 0.22),
-          ["--fill-hover" as string]: eventFill(e.calendar_color, 0.3),
+          ["--fill" as string]: tentative ? eventTentativeFill(e.calendar_color) : eventFill(e.calendar_color),
+          ["--fill-hover" as string]: tentative ? eventTentativeFill(e.calendar_color, 0.24) : eventFill(e.calendar_color, 1),
           color: ink,
           borderColor: tentative ? bar : undefined,
         }}
@@ -93,7 +93,7 @@ export function TimedBlock({
           dragging && "cursor-grabbing shadow-lg",
         )}
       >
-        <span className="pointer-events-none absolute inset-y-0 left-0 w-[3px] rounded-l-[5px]" style={{ background: bar }} />
+        {tentative && <span className="pointer-events-none absolute inset-y-0 left-0 w-[3px] rounded-l-[5px]" style={{ background: bar }} />}
         <span className={cn("block truncate text-[12px] font-semibold leading-[14px]", struck && "line-through")}>
           {e.emoji ? `${e.emoji} ` : ""}
           {title}
@@ -153,9 +153,9 @@ export function AllDayPill({
         ...style,
         height,
         lineHeight: `${height}px`,
-        ["--fill" as string]: eventFill(e.calendar_color, tentative ? 0.22 * 0.6 : 0.22),
-        ["--fill-hover" as string]: eventFill(e.calendar_color, 0.3),
-        color: eventInk(e.calendar_color, dark),
+        ["--fill" as string]: tentative ? eventTentativeFill(e.calendar_color) : eventFill(e.calendar_color),
+        ["--fill-hover" as string]: tentative ? eventTentativeFill(e.calendar_color, 0.24) : eventFill(e.calendar_color, 1),
+        color: tentative ? eventTentativeInk(e.calendar_color, dark) : eventInk(e.calendar_color),
         borderColor: tentative ? bar : undefined,
       }}
       className={cn(
@@ -166,7 +166,7 @@ export function AllDayPill({
         className,
       )}
     >
-      {!continuing && <span className="pointer-events-none absolute inset-y-0 left-0 w-[3px] rounded-[2px]" style={{ background: bar }} />}
+      {!continuing && tentative && <span className="pointer-events-none absolute inset-y-0 left-0 w-[3px] rounded-[2px]" style={{ background: bar }} />}
       <span className={cn("block truncate", (declined || e.done) && "line-through")}>
         {e.emoji ? `${e.emoji} ` : ""}
         {e.title || "(no title)"}

@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type * as T from "@shared/types";
 import { markDraftSent } from "./lib/sentDrafts";
@@ -95,7 +96,7 @@ export const keys = {
   counts: ["counts"] as const,
   imbox: ["imbox"] as const,
   threads: (bucket: string, q?: string, label?: string) => ["threads", bucket, q ?? "", label ?? ""] as const,
-  feed: ["feed"] as const,
+  feed: (bucket: "feed" | "paper_trail" = "feed") => ["feed", bucket] as const,
   /**
    * A peek and a real open are two different queries. A peek (`?peek=1`) leaves the thread unread on
    * the server; an open marks it read. They shared one key, and the assistant panel peeks whatever
@@ -117,9 +118,6 @@ export const keys = {
   // Calendar. Every calendar key starts with "cal" so invalidateCalendar can sweep them in one call.
   calRange: (from: string, to: string) => ["cal", "range", from, to] as const,
   calSources: ["cal", "sources"] as const,
-  habits: ["cal", "habits"] as const,
-  journal: ["cal", "journal"] as const,
-  journalDay: (d: string) => ["cal", "journal", d] as const,
   calDay: (d: string) => ["cal", "day", d] as const,
   dayCovers: ["cal", "covers"] as const,
   flexTasks: (w: string) => ["cal", "flex", w] as const,
@@ -170,9 +168,35 @@ export function useMailChanges(enabled: boolean) {
   }, [enabled, qc]);
 }
 
-/** Invalidate every calendar cache: ranges, sources, habits, days, journal, flex tasks, time, settings. */
+/** Invalidate every calendar cache: ranges, sources, days, flex tasks, time, settings. */
 export function invalidateCalendar(qc: QueryClient) {
   qc.invalidateQueries({ queryKey: ["cal"] });
+}
+
+/**
+ * A browser notification for each thread that lands in "New for you" after the first load — never
+ * for what was already there when the tab opened, or every visit would replay the whole inbox.
+ */
+export function useNewMailNotifier(enabled: boolean) {
+  const imbox = useImbox(enabled);
+  const nav = useNavigate();
+  const seen = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (!enabled) seen.current = null;
+  }, [enabled]);
+  useEffect(() => {
+    if (!enabled || !imbox.data) return;
+    const threads = imbox.data.new_threads;
+    if (seen.current) {
+      for (const t of threads) {
+        if (seen.current.has(t.id)) continue;
+        import("./lib/notifications").then(({ notifyNewMail }) =>
+          notifyNewMail(t.last_from.name || t.last_from.email, t.subject || "(no subject)", () => nav(`/t/${t.id}`)),
+        );
+      }
+    }
+    seen.current = new Set(threads.map((t) => t.id));
+  }, [imbox.data, enabled, nav]);
 }
 
 /**
@@ -233,6 +257,15 @@ export function markThreadsSeen(qc: QueryClient, ids: string[], seen: boolean) {
     };
   });
   mapLists(qc, (arr) => arr.map(patch));
+
+  // The Feed's and Paper Trail's "New" tabs are filtered server-side (t.seen = 0), unlike the Imbox's
+  // client-side split above — without this, a thread marked seen sat in "New" until the next round trip.
+  if (seen) {
+    qc.setQueriesData<{ pages: { threads: T.ThreadSummary[]; next_page: number | null }[]; pageParams: unknown[] }>(
+      { queryKey: ["feed"], predicate: (q) => q.queryKey[q.queryKey.length - 1] === "new" },
+      (old) => (old ? { ...old, pages: old.pages.map((p) => ({ ...p, threads: p.threads.filter((t) => !set.has(t.id)) })) } : old),
+    );
+  }
 
   for (const id of ids) {
     for (const key of [keys.thread(id), keys.thread(id, true)]) {
@@ -299,15 +332,17 @@ export function useThreads(bucket: string, opts: { q?: string; label?: string; e
     enabled: opts.enabled ?? true,
   });
 }
+export type FeedBucket = "feed" | "paper_trail";
 export type FeedThread = T.ThreadSummary & { latest_message: T.Message };
-export interface FeedPage {
+export interface FeedApiPage {
   threads: FeedThread[];
   next_page: number | null;
 }
-export function useFeed(enabled = true, show: "new" | "all" = "new") {
+/** Backs both The Feed and Paper Trail — same full-card reading UI, two different screener destinations. */
+export function useFeed(enabled = true, show: "new" | "all" = "new", bucket: FeedBucket = "feed") {
   return useInfiniteQuery({
-    queryKey: [...keys.feed, show],
-    queryFn: ({ pageParam }) => api.get<FeedPage>(`/api/feed${qs({ page: pageParam, show })}`),
+    queryKey: [...keys.feed(bucket), show],
+    queryFn: ({ pageParam }) => api.get<FeedApiPage>(`/api/feed${qs({ page: pageParam, show, bucket })}`),
     initialPageParam: 0,
     getNextPageParam: (last) => last.next_page ?? undefined,
     refetchInterval: 60_000,
@@ -399,13 +434,44 @@ export function useScreener(enabled = true) {
 export function useScreenerDecide() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (p: { contact_id: string; decision: T.ScreenStatus; scope?: T.DecisionScope }) => api.post<{ ok: boolean }>("/api/screener/decide", p),
-    onMutate: ({ contact_id }) => {
+    mutationFn: (p: { contact_id: string; decision: T.ScreenStatus; scope?: T.DecisionScope; threads?: T.ThreadSummary[] }) =>
+      api.post<{ ok: boolean }>("/api/screener/decide", { contact_id: p.contact_id, decision: p.decision, scope: p.scope }),
+    // Letting someone into the Imbox used to only show up there after the decide request finished *and* a
+    // fresh GET /api/imbox came back — the better part of a second staring at an empty Screener. Drop their
+    // threads straight into the Imbox cache now; the refetch below reconciles it with the server's own view.
+    onMutate: ({ contact_id, decision, threads }) => {
+      const leaving = qc.getQueryData<{ senders: ScreenerSender[] }>(keys.screener)?.senders.find((s) => s.contact.id === contact_id);
       qc.setQueryData<{ senders: ScreenerSender[] }>(keys.screener, (old) => (old ? { senders: old.senders.filter((s) => s.contact.id !== contact_id) } : old));
+      // The Imbox's own "N senders waiting" banner reads a separate cached count/list — every decision
+      // (including screening someone out) used to leave it showing the old count until the invalidated
+      // GET /api/imbox came back, which read as the banner "still there for a few seconds" either way.
+      if (leaving) {
+        qc.setQueriesData<T.ImboxResponse>({ queryKey: keys.imbox }, (old) => {
+          if (!old || !old.screener_senders.some((s) => s.email === leaving.contact.email)) return old;
+          return { ...old, screener_count: Math.max(0, old.screener_count - 1), screener_senders: old.screener_senders.filter((s) => s.email !== leaving.contact.email) };
+        });
+        qc.setQueryData<T.Counts>(keys.counts, (old) => (old ? { ...old, screener: Math.max(0, old.screener - 1) } : old));
+      }
+      if (decision === "imbox" && threads?.length) {
+        const incoming = threads.map((t) => ({ ...t, bucket: "imbox" as const, seen: false, unread: true }));
+        qc.setQueriesData<T.ImboxResponse>({ queryKey: keys.imbox }, (old) => {
+          if (!old) return old;
+          const existing = new Set(old.new_threads.map((t) => t.id));
+          const fresh = incoming.filter((t) => !existing.has(t.id));
+          if (!fresh.length) return old;
+          return { ...old, new_threads: [...fresh, ...old.new_threads].sort((a, b) => b.last_message_at - a.last_message_at) };
+        });
+        qc.setQueryData<T.Counts>(keys.counts, (old) => (old ? { ...old, imbox_new: old.imbox_new + threads.length } : old));
+      }
     },
-    onSettled: () => {
-      invalidateMail(qc);
+    onSettled: (_data, _err, { decision }) => {
+      qc.invalidateQueries({ queryKey: keys.imbox });
+      qc.invalidateQueries({ queryKey: keys.counts });
+      qc.invalidateQueries({ queryKey: keys.screener });
       qc.invalidateQueries({ queryKey: ["contacts"] });
+      if (decision === "feed") qc.invalidateQueries({ queryKey: keys.feed("feed") });
+      else if (decision === "paper_trail") qc.invalidateQueries({ queryKey: keys.feed("paper_trail") });
+      else if (decision === "screened_out") qc.invalidateQueries({ queryKey: keys.screenedOut });
     },
   });
 }
@@ -787,8 +853,16 @@ export function useAiMutations() {
   const invMemory = () => qc.invalidateQueries({ queryKey: ["ai", "memory"] });
   const invConvs = () => qc.invalidateQueries({ queryKey: ["ai", "conversations"] });
   return {
-    saveSettings: useMutation({ mutationFn: (b: { preset?: string; base_url?: string; api_key?: string | null; model?: string; learn?: boolean; auto_send?: boolean }) => request<{ ok: boolean }>("PUT", "/api/ai/settings", b), onSuccess: invSettings }),
+    saveSettings: useMutation({
+      mutationFn: (b: { preset?: string; base_url?: string; api_key?: string | null; model?: string; learn?: boolean; auto_send?: boolean; mem0_mode?: "own" | "mem0" | "both"; mem0_base_url?: string; mem0_api_key?: string | null; mem0_user_id?: string }) =>
+        request<{ ok: boolean; mem0_warning?: string }>("PUT", "/api/ai/settings", b),
+      // mem0_mode changes which store "memory" even means, so a settings save has to drop the
+      // memory cache too — otherwise the list can go on showing whatever the *previous* mode fetched.
+      onSuccess: () => { invSettings(); invMemory(); },
+    }),
     test: useMutation({ mutationFn: () => api.post<{ ok: boolean; model?: string; reply?: string; error?: string }>("/api/ai/settings/test") }),
+    testMem0: useMutation({ mutationFn: () => api.post<{ ok: boolean; error?: string }>("/api/ai/mem0/test") }),
+    syncMem0: useMutation({ mutationFn: () => api.post<{ ok: boolean; pushed: number; pulled: number; updated: number; removed: number }>("/api/ai/mem0/sync"), onSuccess: () => { invSettings(); invMemory(); } }),
     learn: useMutation({ mutationFn: () => api.post<{ changed: number; skipped?: string }>("/api/ai/learn"), onSuccess: () => { invMemory(); invSettings(); } }),
     addMemory: useMutation({ mutationFn: (b: { kind: T.AiMemoryKind; content: string }) => api.post<T.AiMemoryEntry>("/api/ai/memory", b), onSuccess: invMemory }),
     updateMemory: useMutation({ mutationFn: ({ id, ...b }: { id: string; kind?: T.AiMemoryKind; content?: string }) => api.patch<T.AiMemoryEntry>(`/api/ai/memory/${id}`, b), onSuccess: invMemory }),
@@ -919,8 +993,8 @@ export function eventIcsUrl(id: string): string {
 
 // --- Range ---
 /**
- * Everything needed to draw `from`..`to` (inclusive dates): events, habits, day labels and
- * cover art, the week's flex tasks and time entries.
+ * Everything needed to draw `from`..`to` (inclusive dates): events, day labels and cover art,
+ * the week's flex tasks and time entries.
  *
  * `placeholderData` keeps the previous window on screen while the next one loads, so scrolling
  * the day strip never blanks the columns.
@@ -1033,68 +1107,6 @@ export function useEventFromThread() {
   return useMutation({ mutationFn: (thread_id: string) => api.post<EventPrefill>("/api/calendar/events/from-thread", { thread_id }) });
 }
 
-// --- Habits ---
-export function useHabits(from?: string, to?: string, enabled = true) {
-  return useQuery({
-    queryKey: [...keys.habits, from ?? "", to ?? ""],
-    queryFn: () => api.get<T.Habit[]>(`/api/calendar/habits${qs({ from, to })}`),
-    enabled,
-    staleTime: 30_000,
-  });
-}
-
-export interface HabitInput {
-  name?: string;
-  icon?: string;
-  color?: string;
-  /** Weekdays the habit is expected on, 0 = Sunday. Empty means every day. */
-  days?: number[];
-  position?: number;
-  archived?: boolean;
-}
-
-export function useHabitMutations() {
-  const qc = useQueryClient();
-  const inv = () => invalidateCalendar(qc);
-  return {
-    create: useMutation({ mutationFn: (b: HabitInput & { name: string }) => api.post<T.Habit>("/api/calendar/habits", b), onSuccess: inv }),
-    update: useMutation({ mutationFn: ({ id, ...b }: HabitInput & { id: string }) => api.patch<T.Habit>(`/api/calendar/habits/${id}`, b), onSuccess: inv }),
-    remove: useMutation({ mutationFn: (id: string) => api.del<{ ok: boolean }>(`/api/calendar/habits/${id}`), onSuccess: inv }),
-    /**
-     * Ticking a habit has to feel instant, so this one is optimistic: every cached range
-     * gets the completion added (or removed) before the request goes out, and the snapshots
-     * are rolled back if the server disagrees.
-     */
-    toggle: useMutation({
-      mutationFn: ({ id, date }: { id: string; date: string }) => api.post<{ ok: boolean; done: boolean }>(`/api/calendar/habits/${id}/toggle`, { date }),
-      onMutate: async ({ id, date }) => {
-        // Stop in-flight range fetches from landing on top of the optimistic patch.
-        await qc.cancelQueries({ queryKey: ["cal", "range"] });
-        const snapshots = qc.getQueriesData<T.CalendarRange>({ queryKey: ["cal", "range"] });
-        qc.setQueriesData<T.CalendarRange>({ queryKey: ["cal", "range"] }, (old) => {
-          if (!old) return old;
-          let hit = false;
-          const habits = old.habits.map((h) => {
-            if (h.id !== id) return h;
-            hit = true;
-            const done = h.completions?.includes(date) ?? false;
-            const completions = done ? (h.completions ?? []).filter((d) => d !== date) : [...(h.completions ?? []), date].sort();
-            // streak is server-computed; nudge it so the badge doesn't lag the tick.
-            const streak = h.streak === undefined ? undefined : Math.max(0, h.streak + (done ? -1 : 1));
-            return { ...h, completions, streak };
-          });
-          return hit ? { ...old, habits } : old;
-        });
-        return { snapshots };
-      },
-      onError: (_e, _v, ctx) => {
-        for (const [key, data] of ctx?.snapshots ?? []) qc.setQueryData(key, data);
-      },
-      onSettled: inv,
-    }),
-  };
-}
-
 // --- Days (label + cover art) ---
 export function useCalendarDay(date: string | undefined) {
   return useQuery({
@@ -1149,29 +1161,6 @@ export function useCalendarDayMutation() {
       request<T.CalendarDay>("PUT", `/api/calendar/days/${date}`, b),
     onSuccess: (data, v) => {
       qc.setQueryData(keys.calDay(v.date), data);
-      invalidateCalendar(qc);
-    },
-  });
-}
-
-// --- Journal ---
-export function useJournal(date: string | undefined) {
-  return useQuery({
-    queryKey: keys.journalDay(date ?? ""),
-    queryFn: () => api.get<T.JournalEntry>(`/api/calendar/journal/${date}`),
-    enabled: !!date,
-  });
-}
-/** Every day that has a journal entry, for the journal index. */
-export function useJournalIndex(enabled = true) {
-  return useQuery({ queryKey: keys.journal, queryFn: () => api.get<T.JournalIndexEntry[]>("/api/calendar/journal"), enabled, staleTime: 30_000 });
-}
-export function useJournalMutation() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ date, ...b }: { date: string; journal_html: string }) => request<T.JournalEntry>("PUT", `/api/calendar/journal/${date}`, b),
-    onSuccess: (data, v) => {
-      qc.setQueryData(keys.journalDay(v.date), data);
       invalidateCalendar(qc);
     },
   });
