@@ -163,6 +163,22 @@ struct InsetTopBar: View {
         .frame(height: 44)
         .background(W.background.opacity(0.9))
         .background { BlurBehind() }
+        .background { WindowDragArea() }
+    }
+}
+
+/// `data-tauri-drag-region`: `isMovableByWindowBackground` alone does not drag the window here,
+/// because the whole content area is one `NSHostingView` that AppKit always counts as "handled"
+/// rather than background — even where SwiftUI itself has attached nothing. Placed behind the top
+/// bar's row so a button or the title text above it still gets first claim on the click.
+struct WindowDragArea: NSViewRepresentable {
+    func makeNSView(context: Context) -> DragCatcherView { DragCatcherView() }
+    func updateNSView(_ view: DragCatcherView, context: Context) {}
+}
+
+final class DragCatcherView: NSView {
+    override func mouseDown(with event: NSEvent) {
+        window?.performDrag(with: event)
     }
 }
 

@@ -186,6 +186,10 @@ struct Sidebar: View {
         .padding(.horizontal, 8)
         .padding(.top, 40)   // pt-10: clears the traffic lights, as the web's Mac build does.
         .padding(.bottom, 8)
+        // That top strip is empty space next to the traffic lights — exactly where a habit reaches
+        // to drag the window — so it needs its own catcher; InsetTopBar's only covers the content
+        // side, to the right of the sidebar.
+        .background(alignment: .top) { WindowDragArea().frame(height: 40) }
     }
 
     @ViewBuilder
