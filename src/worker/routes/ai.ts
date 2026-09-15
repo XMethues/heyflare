@@ -199,6 +199,58 @@ ai.post("/mem0/sync", async (c) => {
   return c.json({ ok: true, ...r });
 });
 
+ai.post("/models", async (c) => {
+  const user = c.get("user");
+  const b = await c.req.json<{ preset?: string; base_url?: string; api_key?: string }>().catch(() => ({}) as any);
+  const row = await loadAiSettings(c.env, user.id);
+  const preset = presetById(typeof b.preset === "string" ? b.preset : row?.preset ?? "anthropic");
+  const base = preset.id === "custom" ? String(b.base_url ?? "").trim().replace(/\/+$/, "") : preset.base_url;
+  if (!base || !/^https?:\/\//i.test(base)) return c.json({ models: [] });
+  let key = typeof b.api_key === "string" ? b.api_key.trim() : "";
+  if (!key && row?.api_key_enc) {
+    try {
+      key = await decryptSecret(await getSessionSecret(c.env), row.api_key_enc);
+    } catch {
+      key = "";
+    }
+  }
+  const headers: Record<string, string> = { accept: "application/json" };
+  if (preset.kind === "anthropic") {
+    headers["anthropic-version"] = "2023-06-01";
+    if (key && (key.startsWith("sk-ant-oat") || !key.startsWith("sk-ant-"))) {
+      headers.authorization = `Bearer ${key}`;
+      headers["anthropic-beta"] = "oauth-2025-04-20";
+    } else if (key) {
+      headers["x-api-key"] = key;
+    }
+  } else {
+    if (key) headers.authorization = `Bearer ${key}`;
+    if (preset.id === "openrouter") {
+      headers["HTTP-Referer"] = "https://github.com/doable-team/heyflare";
+      headers["X-Title"] = "heyflare";
+    }
+  }
+  const url = preset.kind === "anthropic" ? `${base}/v1/models?limit=100` : `${base}/models`;
+  try {
+    const res = await fetch(url, { headers, signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) {
+      const body = await res.text();
+      return c.json({ models: [], error: `HTTP ${res.status} ${body.trim().slice(0, 200)}`.slice(0, 300) });
+    }
+    const json: any = await res.json().catch(() => null);
+    const arr: any[] = Array.isArray(json?.data) ? json.data : Array.isArray(json?.models) ? json.models : [];
+    const seen = new Set<string>();
+    for (const entry of arr) {
+      const id = typeof entry?.id === "string" ? entry.id : typeof entry?.name === "string" ? entry.name : "";
+      if (id && !seen.has(id)) seen.add(id);
+      if (seen.size >= 500) break;
+    }
+    return c.json({ models: [...seen].sort() });
+  } catch (e) {
+    return c.json({ models: [], error: (e as Error)?.message?.slice(0, 200) ?? "request failed" });
+  }
+});
+
 /* ---------- memory ---------- */
 
 ai.get("/memory", async (c) => c.json(await listMemory(c.env, c.get("user").id)));
