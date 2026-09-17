@@ -16,7 +16,7 @@
     "run_worker_first": ["/api/*", "/auth/*"]
   },
   "d1_databases": [
-    { "binding": "DB", "database_name": "heyflare-db", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "migrations" }
+    { "binding": "DB", "database_name": "heyflare-db", "database_id": "b4a1589f-4114-49e6-8880-140d7da965c0", "migrations_dir": "migrations" }
   ],
   // Every minute: Gmail incremental sync, bubble-ups, scheduled sends, contact photos.
   "triggers": { "crons": ["* * * * *"] },
